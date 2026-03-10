@@ -1,66 +1,87 @@
-name: Deploy
+# name: Deploy
 
-on:
-  push:
-    branches:
-      - main
+# on:
+#   push:
+#     branches:
+#       - main
 
-jobs: 
-  deploy:
-    runs-on: ubuntu-latest
+# jobs: 
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps: 
-      - name: Checkout
-        uses: actions/checkout@v4
+#     steps: 
+#       - name: Checkout
+#         uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
 
-      - name: Install dependencies
-        run: npm --prefix client install
+#       - name: Install dependencies
+#         run: npm --prefix client install
 
-      - name: Build client
-        run: npm --prefix client run build
+#       - name: Build client
+#         run: npm --prefix client run build
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+#       - name: Setup SSH key
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+#           chmod 600 ~/.ssh/ec2_key
+#           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create .env file for server
-        run: |
-          echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" > server/.env
-          echo "FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" >> server/.env
-          echo "PORT=3001" >> server/.env
-          echo "WS_PORT=3002" >> server/.env
+#       - name: Create .env file for server
+#         run: |
+#           echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" > server/.env
+#           echo "FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" >> server/.env
+#           echo "PORT=3001" >> server/.env
+#           echo "WS_PORT=3002" >> server/.env
 
-      - name: Create directories on EC2
-        run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "sudo mkdir -p /var/www/stock-watchlist/client /var/www/stock-watchlist/server && sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/stock-watchlist"
+#       - name: Create directories on EC2
+#         run: |
+#           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+#             "sudo mkdir -p /var/www/stock-watchlist/client /var/www/stock-watchlist/server && sudo chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/stock-watchlist"
 
-      - name: Deploy to EC2
-        run: |
-          # Copy built client to EC2
-          rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
-            client/dist/ \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/client/
+#       - name: Deploy to EC2
+#         run: |
+#           # Copy built client to EC2
+#           rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
+#             client/dist/ \
+#             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/client/
 
-          # Copy server files to EC2
-          rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
-            --exclude='node_modules' \
-            server/ \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/server/
+#           # Copy server files to EC2
+#           rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
+#             --exclude='node_modules' \
+#             server/ \
+#             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/server/
         
-      - name: Install dependencies and restart server
+#       - name: Install dependencies and restart server
+#         run: |
+#           ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+#             cd /var/www/stock-watchlist/server
+#             npm install --production
+#             pm2 restart stock-server || pm2 start index.js --name stock-server
+#             pm2 save
+#           EOF
+
+##########################################
+
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on: [push]
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository code
+        uses: actions/checkout@v5
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: List files in the repository
         run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /var/www/stock-watchlist/server
-            npm install --production
-            pm2 restart stock-server || pm2 start index.js --name stock-server
-            pm2 save
-          EOF
+          ls ${{ github.workspace }}
+      - run: echo "🍏 This job's status is ${{ job.status }}."
