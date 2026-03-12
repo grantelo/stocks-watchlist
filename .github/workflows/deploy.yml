@@ -106,6 +106,14 @@ jobs:
         chmod 600 ~/.ssh/ec2_key
         ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
+    - name: Debug SSH files
+      run: |
+        ls -la ~/.ssh
+
+    - name: Validate key
+      run: |
+        ssh-keygen -l -f ~/.ssh/ec2_key
+
     - name: Copy env
       run: |
         echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" > server/.env
