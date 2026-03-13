@@ -127,6 +127,11 @@ jobs:
             "mkdir -p /var/www/stock-watchlist/client /var/www/stock-watchlist/server"
     #& chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/stock-watchlist
 
+    - name: Check path on server
+      run: |
+        ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+        "ls -la /var/www/stock-watchlist"
+
     - name: Deploy to EC2
       run: |
        # Copy built client to EC2
