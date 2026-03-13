@@ -145,6 +145,19 @@ jobs:
           server/ \
           ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/server/
 
+    - name: Install dependencies and restart server
+      run: |
+        ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+        cd /var/www/stock-watchlist/server
+        npm install --production
+        pm2 restart stock-server || pm2 start index.js --name stock-server
+        pm2 save
+        EOF
+
+
+
+
+
         
 
 
