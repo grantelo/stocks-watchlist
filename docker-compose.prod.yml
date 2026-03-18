@@ -1,0 +1,27 @@
+name: production
+services:
+  frontend:
+    image: ${ECR_REGISTRY}/grantelo/stock-watchlist-frontend:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    # volumes:
+    #   - ./frontend:/app
+    #   - /app/node_modules
+  backend:
+    image: ${ECR_REGISTRY}/grantelo/stock-watchlist-backend:${IMAGE_TAG:-latest}
+    restart: always
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - NODE_ENV=production
+    # volumes:
+    #   - ./backend:/app
+    #   - /app/node_modules
+    # ports:
+    #   - "8080:8080"
+    expose:
+      - "3001"
+      - "3002"

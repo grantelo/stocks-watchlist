@@ -72,6 +72,9 @@
 
 name: Node.js CI
 
+env:
+  DOCKERHUB_REGISTRY: docker.io
+
 on:
   push:
     branches: [ "main" ]
@@ -92,67 +95,131 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
-    - name: Install dependencies
-      run: npm --prefix client ci
+    - name: Login to Docker Hub
+      id: login-ecr
+      uses: docker/login-action@v4
+      with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build client
-    # - run: npm run build --if-present
-      run: npm --prefix client run build
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-    - name: Setup SSH key
-      run: | 
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
-        chmod 600 ~/.ssh/ec2_key
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+    - name: Build and push Frontend
+      uses: docker/build-push-action@v7
+      with:
+        context: './client'
+        push: true
+        tags: |
+           ${{ env.DOCKERHUB_REGISTRY }}/${{ secrets.ECR_FRONTEND }}:${{ github.sha }}
+           ${{ env.DOCKERHUB_REGISTRY }}/${{ secrets.ECR_FRONTEND }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-    - name: Debug SSH files
-      run: |
-        ls -la ~/.ssh
+    - name: Build and push Backend
+      uses: docker/build-push-action@v7
+      with:
+        context: './server'
+        push: true
+        tags: |
+          ${{ env.DOCKERHUB_REGISTRY }}/${{ secrets.ECR_BACKEND }}:${{ github.sha }}
+          ${{ env.DOCKERHUB_REGISTRY }}/${{ secrets.ECR_BACKEND }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-    - name: Validate key
-      run: |
-        ssh-keygen -l -f ~/.ssh/ec2_key
-
-    - name: Copy env
-      run: |
-        echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" > server/.env
-        echo "FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" >> server/.env
-        echo "PORT=3001" >> server/.env
-        echo "WS_PORT=3002" >> server/.env
-
-    - name: Create directories on EC2
-      run: |
-          ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "mkdir -p /var/www/stock-watchlist/client /var/www/stock-watchlist/server"
-    #& chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/stock-watchlist
-
-    - name: Check path on server
-      run: |
-        ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-        "ls -la /var/www/stock-watchlist"
-
+    - name: Copy docker-compose.prod.yml
+      uses: appleboy/scp-action@v1
+      with:
+        host: ${{secrets.EC2_HOST}}
+        username: root
+        key: ${{secrets.EC2_SSH_KEY}}
+        source: "docker-compose.prod.yml"
+        target: /home/ubuntu/stock-watchlist/
+    
     - name: Deploy to EC2
-      run: |
-       # Copy built client to EC2
-        rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
-          client/dist/ \
-         ${{secrets.EC2_USER}}@${{secrets.EC2_HOST}}:/var/www/stock-watchlist/client/
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: root
+        key: ${{ secrets.EC2_SSH_KEY }}
+        envs: MONGODB_URI, FINNHUB_API_KEY
+        script: |
+          cd /home/ubuntu/stock-watchlist
 
-       # Copy server files to EC2
-        rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
-          --exclude='node_modules' \
-          server/ \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/server/
+          export ECR_REGISTRY=${{env.DOCKERHUB_REGISTRY}}
+          export IMAGE_TAG=${{ github.sha }}
+          export MONGODB_URI=$MONGODB_URI
+          export FINNHUB_API_KEY=$FINNHUB_API_KEY
 
-    - name: Install dependencies and restart server
-      run: |
-        ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-        cd /var/www/stock-watchlist/server
-        npm install --production
-        pm2 restart stock-server || pm2 start index.js --name stock-server
-        pm2 save
-        EOF
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d
+          docker image prune -f
+      env:
+        MONGODB_URI: ${{secrets.MONGODB_URI}}
+        FINNHUB_API_KEY: ${{secrets.FINNHUB_API_KEY}}
+    
+
+    # - name: Install dependencies
+    #   run: npm --prefix client ci
+
+    # - name: Build client
+    # # - run: npm run build --if-present
+    #   run: npm --prefix client run build
+
+    # - name: Setup SSH key
+    #   run: | 
+    #     mkdir -p ~/.ssh
+    #     echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+    #     chmod 600 ~/.ssh/ec2_key
+    #     ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    # - name: Debug SSH files
+    #   run: |
+    #     ls -la ~/.ssh
+
+    # - name: Validate key
+    #   run: |
+    #     ssh-keygen -l -f ~/.ssh/ec2_key
+
+    # - name: Copy env
+    #   run: |
+    #     echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" > server/.env
+    #     echo "FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}" >> server/.env
+    #     echo "PORT=3001" >> server/.env
+    #     echo "WS_PORT=3002" >> server/.env
+
+    # - name: Create directories on EC2
+    #   run: |
+    #       ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+    #         "mkdir -p /var/www/stock-watchlist/client /var/www/stock-watchlist/server"
+    # #& chown -R ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} /var/www/stock-watchlist
+
+    # - name: Check path on server
+    #   run: |
+    #     ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+    #     "ls -la /var/www/stock-watchlist"
+
+    # - name: Deploy to EC2
+    #   run: |
+    #    # Copy built client to EC2
+    #     rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
+    #       client/dist/ \
+    #      ${{secrets.EC2_USER}}@${{secrets.EC2_HOST}}:/var/www/stock-watchlist/client/
+
+    #    # Copy server files to EC2
+    #     rsync -avz -e "ssh -i ~/.ssh/ec2_key" \
+    #       --exclude='node_modules' \
+    #       server/ \
+    #       ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/var/www/stock-watchlist/server/
+
+    # - name: Install dependencies and restart server
+    #   run: |
+    #     ssh -i ~/.ssh/ec2_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+    #     cd /var/www/stock-watchlist/server
+    #     npm install --production
+    #     pm2 restart stock-server || pm2 start index.js --name stock-server
+    #     pm2 save
+    #     EOF
 
 
 

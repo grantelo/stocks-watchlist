@@ -1,0 +1,25 @@
+name: development
+services:
+  frontend:
+    build: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    # volumes:
+    #   - ./frontend:/app
+    #   - /app/node_modules
+  backend:
+    build: ./server
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - NODE_ENV=development
+    # volumes:
+    #   - ./backend:/app
+    #   - /app/node_modules
+    # ports:
+    #   - "8080:8080"
+    expose:
+      - "3001"
+      - "3002"
